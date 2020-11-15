@@ -42,7 +42,8 @@ torch.backends.cudnn.benchmark = True
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print('===> Building model ', opt.model_type)
-model = ABPN_v3(input_dim=3, dim=32)
+#model = ABPN_v3(input_dim=3, dim=32)
+model = ABPN_v3(input_dim=1, dim=32)
 model = model.to(device)
 model = torch.nn.DataParallel(model)
 
@@ -53,6 +54,13 @@ if os.path.exists(model_name):
 
 
 img_splitter = ImageSplitter(opt.patch_size, opt.upscale_factor, opt.stride)
+
+def adjust_dynamic_range(data, drange_in, drange_out):
+    if drange_in != drange_out:
+        scale = (np.float32(drange_out[1]) - np.float32(drange_out[0])) / (np.float32(drange_in[1]) - np.float32(drange_in[0]))
+        bias = (np.float32(drange_out[0]) - np.float32(drange_in[0]) * scale)
+        data = data * scale + bias
+    return data 
 
 def eval():
     utils_logger.logger_info('AIM-track', log_path='AIM-track.log')
@@ -86,7 +94,7 @@ def eval():
         img_name, ext = os.path.splitext(LR_image[i])
         logger.info('{:->4d}--> {:>10s}'.format(idx, img_name+ext))
 
-        LR = Image.open(LR_image[i]).convert('RGB')
+        LR = Image.open(LR_image[i])#.convert('RGB')
         LR_90 = LR.transpose(Image.ROTATE_90)
         LR_180 = LR.transpose(Image.ROTATE_180)
         LR_270 = LR.transpose(Image.ROTATE_270)
@@ -114,8 +122,11 @@ def eval():
         pred_90f = np.rot90(np.fliplr(pred_90f), 3)
         pred_180f = np.rot90(np.fliplr(pred_180f), 2)
         pred_270f = np.rot90(np.fliplr(pred_270f), 1)
-        prediction = (pred + pred_90 + pred_180 + pred_270 + pred_f + pred_90f + pred_180f + pred_270f) * 255.0 / 8.0
-        prediction = prediction.clip(0, 255)
+
+        prediction = (pred + pred_90 + pred_180 + pred_270 + pred_f + pred_90f + pred_180f + pred_270f) / 8.0
+        prediction = prediction.clip(0, 1)    
+
+        prediction = adjust_dynamic_range(prediction,[0,1],[1,4])  
 
         Image.fromarray(np.uint8(prediction)).save(SR_image[i])
 
@@ -170,7 +181,8 @@ def chop_forward(img, network, start, end):
 
     channel_swap = (1, 2, 0)
     run_time = 0
-    img = transform(img).unsqueeze(0)
+    #img = transform(img).unsqueeze(0)
+    img = torch.tensor(adjust_dynamic_range(np.asarray(img),[1,4],[0,1])[None,:,:]).unsqueeze(0)
     img_patch = img_splitter.split_img_tensor(img)
 
     testset = utils.TensorDataset(img_patch)

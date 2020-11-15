@@ -14,7 +14,7 @@ def is_image_file(filename):
 
 
 def load_img(filepath):
-    img = Image.open(filepath).convert('RGB')
+    img = Image.open(filepath)#.convert('RGB')
     # y, _, _ = img.split()
     return img
 
@@ -24,6 +24,13 @@ def rescale_img(img_in, scale):
     new_size_in = tuple([int(x * scale) for x in size_in])
     img_in = img_in.resize(new_size_in, resample=Image.BICUBIC)
     return img_in
+
+def adjust_dynamic_range(data, drange_in, drange_out):
+    if drange_in != drange_out:
+        scale = (np.float32(drange_out[1]) - np.float32(drange_out[0])) / (np.float32(drange_in[1]) - np.float32(drange_in[0]))
+        bias = (np.float32(drange_out[0]) - np.float32(drange_in[0]) * scale)
+        data = data * scale + bias
+    return data
 
 
 def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):
@@ -43,6 +50,7 @@ def get_patch(img_in, img_tar, patch_size, scale, ix=-1, iy=-1):
 
     img_in = img_in.crop((iy, ix, iy + ip, ix + ip))
     img_tar = img_tar.crop((ty, tx, ty + tp, tx + tp))
+
     #img_bic = img_bic.crop((ty, tx, ty + tp, tx + tp))
 
     #info_patch = {
@@ -81,6 +89,7 @@ class DatasetFromFolder(data.Dataset):
         super(DatasetFromFolder, self).__init__()
         self.hr_image_filenames = [join(HR_dir, x) for x in listdir(HR_dir) if is_image_file(x)]
         self.lr_image_filenames = [join(LR_dir, x) for x in listdir(LR_dir) if is_image_file(x)]
+        print(self.lr_image_filenames)
         self.patch_size = patch_size
         self.upscale_factor = upscale_factor
         self.transform = transform
@@ -92,17 +101,22 @@ class DatasetFromFolder(data.Dataset):
         name = self.hr_image_filenames[index]
         #lr_name = name[:39]+'LR/'+name[42:-4]+'x4.png'
         #lr_name = name[:39]+'LR_16x/'+name[42:]
-        lr_name = name[:32]+'LR_16x/'+name[35:]
+        #lr_name = name[:32]+'LR_16x/'+name[35:]
+        lr_name=join("data/LR_16x/",name.split("HR/")[1])
         input = load_img(lr_name)
 
         input, target, = get_patch(input, target, self.patch_size, self.upscale_factor)
-
+        
         if self.data_augmentation:
             input, target, _ = augment(input, target)
 
         if self.transform:
-            input = self.transform(input)
-            target = self.transform(target)
+            #input = self.transform(input)
+            #target = self.transform(target)
+            #input=torch.tensor(adjust_dynamic_range(np.asarray(input),[1,4],[0,1]).transpose(2,0,1))
+            #target=torch.tensor(adjust_dynamic_range(np.asarray(target),[1,4],[0,1]).transpose(2,0,1))
+            input=torch.tensor(adjust_dynamic_range(np.asarray(input),[1,4],[0,1])[None,:,:])
+            target=torch.tensor(adjust_dynamic_range(np.asarray(target),[1,4],[0,1])[None,:,:])
 
         return input, target
 

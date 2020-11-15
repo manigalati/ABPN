@@ -17,7 +17,7 @@ from math import log, pow
 import socket
 import time
 from torch.distributions.normal import Normal
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
@@ -109,7 +109,8 @@ training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, ba
 
 print('===> Building model ', opt.model_type)
 
-model = ABPN_v3(input_dim=3, dim=32)
+#model = ABPN_v3(input_dim=3, dim=32)
+model = ABPN_v3(input_dim=1, dim=32)
 model = torch.nn.DataParallel(model)
 L1_criterion = nn.L1Loss()
 L2_criterion = nn.MSELoss(size_average=False)
